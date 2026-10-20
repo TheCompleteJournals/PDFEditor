@@ -40,7 +40,7 @@ textarea.sel{background:rgba(36,71,214,.07);box-shadow:0 0 0 1px rgba(36,71,214,
 <div class="g"><label for="sp">Line spacing</label><input id="sp" type="range" min="0.5" max="3" step="0.05" value="1"><span class="v" id="spv">×1.00</span></div>
 <div class="g"><label for="sz">Text size</label><input id="sz" type="range" min="0.3" max="1" step="0.02" value="0.6"><span class="v" id="szv">60%</span></div>
 <div class="g"><button id="del">Delete box</button></div>
-<div class="g"><button id="sv">Save progress</button><label class="btn">Load progress<input id="ld" type="file" accept=".json,application/json"></label><button id="dl" class="pri">Download PDF</button></div>
+<div class="g"><span class="v" id="ss" role="status"></span><button id="sv">Back up</button><label class="btn">Restore backup<input id="ld" type="file" accept=".json,application/json"></label><button id="dl" class="pri">Download PDF</button></div>
 </header>
 <main id="desk">
 <div id="toast" role="status"></div>
@@ -58,7 +58,7 @@ async function openFile(f){
  if(!f)return;
  if(!window.pdfjsLib){msg('The PDF reader couldn’t load. Check your connection and reload.');return}
  try{const buf=await f.arrayBuffer();S.bytes=new Uint8Array(buf.slice(0));S.doc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise}catch(e){msg('That file couldn’t be opened. Choose a PDF.');return}
- S.key='cj:'+f.name+':'+f.size;S.name=f.name;S.boxes=[];
+ S.key='cj:'+f.name+':'+f.size;S.name=f.name;S.boxes=[];idbPut('last',{name:f.name,bytes:S.bytes}).catch(()=>{});try{navigator.storage.persist()}catch(_){}
  try{S.boxes=JSON.parse(localStorage.getItem(S.key)||'[]')}catch(e){}
  const v=(await S.doc.getPage(1)).getViewport({scale:1});S.r0=v.height/v.width;
  obs.disconnect();desk.innerHTML='';S.pages=[];S.sel=null;S.W=0;
@@ -159,7 +159,7 @@ function pick(b){
  S.mult=b.mult;S.sr=b.sr;$('#sp').value=b.mult;$('#sz').value=b.sr;lab()}
 function lab(){$('#spv').textContent='×'+(+$('#sp').value).toFixed(2);$('#szv').textContent=Math.round($('#sz').value*100)+'%'}
 function upd(k,v){S[k]=v;if(S.sel){S.sel[k]=v;place(S.sel);save()}lab()}
-let st;function save(){clearTimeout(st);st=setTimeout(()=>{try{localStorage.setItem(S.key,JSON.stringify(S.boxes.filter(b=>b.t).map(({p,x,by,w,base,mult,sr,t})=>({p,x,by,w,base,mult,sr,t}))))}catch(e){}},300)}
+let st;function save(){clearTimeout(st);st=setTimeout(()=>{try{localStorage.setItem(S.key,JSON.stringify(S.boxes.filter(b=>b.t).map(({p,x,by,w,base,mult,sr,t})=>({p,x,by,w,base,mult,sr,t}))));$('#ss').textContent='Saved on this device'}catch(e){$('#ss').textContent='Not saved: browser storage is blocked'}},300)}
 $('#sp').oninput=e=>upd('mult',+e.target.value);
 $('#sz').oninput=e=>upd('sr',+e.target.value);
 $('#del').onclick=()=>{const b=S.sel;if(!b)return;b.el.remove();S.boxes=S.boxes.filter(x=>x!==b);S.sel=null;save()};
@@ -182,15 +182,15 @@ const slim=()=>S.boxes.filter(b=>b.t).map(({p,x,by,w,base,mult,sr,t})=>({p,x,by,
 $('#sv').onclick=()=>{
  if(!S.doc)return toast('Open your PDF first.');
  dl(new Blob([JSON.stringify({v:1,name:S.name,pages:S.doc.numPages,boxes:slim()})],{type:'application/json'}),base()+'-progress.json');
- toast('Progress saved to a file. Load it later to carry on.')};
+ toast('Backup downloaded. Use Restore backup to move your work to another device.')};
 $('#ld').onchange=async e=>{
  const f=e.target.files[0];e.target.value='';if(!f)return;
- if(!S.doc)return toast('Open your PDF first, then load your progress.');
+ if(!S.doc)return toast('Open your PDF first, then restore your backup.');
  try{const d=JSON.parse(await f.text());if(!Array.isArray(d.boxes))throw 0;
-  if(d.pages&&d.pages!==S.doc.numPages)return toast('This progress file belongs to a different PDF.');
+  if(d.pages&&d.pages!==S.doc.numPages)return toast('This backup belongs to a different PDF.');
   S.boxes.forEach(b=>b.el&&b.el.remove());S.sel=null;
-  S.boxes=d.boxes.filter(b=>S.pages[b.p-1]&&b.t);S.boxes.forEach(mk);save();toast('Progress loaded.')}
- catch(_){toast('That file isn’t a progress file.')}};
+  S.boxes=d.boxes.filter(b=>S.pages[b.p-1]&&b.t);S.boxes.forEach(mk);save();toast('Backup restored.')}
+ catch(_){toast('That file isn’t a backup file.')}};
 $('#dl').onclick=async()=>{
  if(!S.doc)return toast('Open your PDF first.');
  if(!window.PDFLib)return toast('The PDF writer couldn’t load. Check your connection and reload.');
@@ -214,4 +214,8 @@ $('#dl').onclick=async()=>{
  catch(e){toast('The PDF couldn’t be created. Try again.')}
  bt.disabled=false;bt.textContent='Download PDF'};
 lab();
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('jt',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function idbPut(k,v){const d=await idb();return new Promise((res,rej)=>{const t=d.transaction('f','readwrite');t.objectStore('f').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
+async function idbGet(k){const d=await idb();return new Promise((res,rej)=>{const r=d.transaction('f').objectStore('f').get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+(async()=>{try{const r=await idbGet('last');if(r){await openFile(new File([r.bytes],r.name,{type:'application/pdf'}));if(S.doc)toast('Welcome back. Your journal and typing are restored.')}}catch(_){}})();
 </script></body></html>
