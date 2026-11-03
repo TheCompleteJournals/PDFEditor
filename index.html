@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>Journal Editor</title>
+<title>Journal typer</title>
 <link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#2447d6">
 <link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Journal typer">
@@ -41,7 +41,15 @@ details.sub{border-top:1px solid var(--line);padding-top:8px}details.sub summary
 details.sub .row{margin-top:8px}
 .sw{width:32px;height:32px;min-height:0;border-radius:50%;padding:0;border:3px solid var(--line)}
 .sw[aria-pressed=true]{border-color:var(--acc);box-shadow:0 0 0 2px var(--bar) inset}
-#desk{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px;-webkit-overflow-scrolling:touch}
+#desk{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain}
+#desk.two{flex-direction:row;flex-wrap:wrap;justify-content:center;align-content:flex-start}
+.page:not(.ready){background:linear-gradient(100deg,#fff 30%,#eef0f5 50%,#fff 70%) 0 0/300% 100%;animation:sh 1.4s linear infinite}
+@keyframes sh{to{background-position:-300% 0}}
+@keyframes pop{from{opacity:0;transform:translateY(4px)}}
+textarea{animation:pop .15s ease-out}
+button,.btn{transition:background .15s,border-color .15s,transform .1s}
+button:active:not(:disabled),.btn:active{transform:scale(.97)}
+#cols{display:none}@media (min-width:1000px){#cols{display:inline-flex}}
 .page{position:relative;background:#fff;box-shadow:0 1px 7px rgba(0,0,0,.28);flex:none;overflow:hidden}
 .page canvas{display:block}
 .page canvas.ik{position:absolute;left:0;top:0;pointer-events:none}
@@ -70,7 +78,7 @@ textarea.sel{background:rgba(36,71,214,.07);box-shadow:0 0 0 1px rgba(36,71,214,
  .pheader{display:flex}
  .sections{grid-template-columns:1fr}
 }
-@media (prefers-reduced-motion:reduce){#panel,details.sec>summary::after{transition:none}}
+@media (prefers-reduced-motion:reduce){#panel,details.sec>summary::after{transition:none}.page:not(.ready),textarea{animation:none}button:active:not(:disabled),.btn:active{transform:none}}
 </style></head><body>
 <header id="top"><span class="brand">📓 Journal typer</span><span class="sp"></span><span class="v" id="pgt"></span><button id="tg" aria-expanded="true" aria-controls="panel">Hide tools ▴</button></header>
 <div id="panel">
@@ -80,7 +88,7 @@ textarea.sel{background:rgba(36,71,214,.07);box-shadow:0 0 0 1px rgba(36,71,214,
 <div class="row"><label class="btn pri">Open PDF<input id="file" type="file" accept="application/pdf"></label><span class="v" id="ss" role="status"></span></div>
 <p class="note">Your PDF stays on this device.</p></div></details>
 <details class="sec" open><summary>View</summary><div class="body">
-<div class="row"><button id="fw" aria-pressed="true">Fit width</button><button id="fp" aria-pressed="false">Fit page</button></div>
+<div class="row"><button id="fw" aria-pressed="true">Fit width</button><button id="fp" aria-pressed="false">Fit page</button><button id="cols" aria-pressed="false">Two pages</button></div>
 <div class="row"><button id="zo" aria-label="Zoom out">−</button><span class="v" id="zl">100%</span><button id="zi" aria-label="Zoom in">+</button></div>
 <div class="row"><label for="pg">Go to page</label><input id="pg" type="number" min="1" value="1"><span class="v" id="pc"></span></div></div></details>
 <details class="sec" data-m="1" open><summary>Write</summary><div class="body">
@@ -109,7 +117,7 @@ textarea.sel{background:rgba(36,71,214,.07);box-shadow:0 0 0 1px rgba(36,71,214,
 const $=s=>document.querySelector(s),desk=$('#desk');
 const S={doc:null,pages:[],boxes:[],sel:null,fit:'width',zoom:1,snap:true,mult:1,sr:.6,W:0,r0:1.41,key:''};
 if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='lib/pdf.worker.min.js';
-const obs=new IntersectionObserver(es=>es.forEach(e=>{const p=S.pages[+e.target.dataset.i];if(e.isIntersecting)render(p);else if(p.on){p.tok++;p.on=false;p.cv.width=0;p.ik.width=0}}),{root:desk,rootMargin:'900px 0px'});
+const obs=new IntersectionObserver(es=>es.forEach(e=>{const p=S.pages[+e.target.dataset.i];if(e.isIntersecting)render(p);else if(p.on||p.cv.width){p.tok++;p.on=false;p.cv.width=0;p.ik.width=0;p.el.classList.remove('ready')}}),{root:desk,rootMargin:'1200px 0px'});
 function msg(t){const m=$('#msg');if(m)m.textContent=t}
 async function openFile(f){
  if(!f)return;
@@ -123,30 +131,46 @@ async function openFile(f){
  for(let i=0;i<S.doc.numPages;i++){
   const el=document.createElement('div');el.className='page';el.dataset.i=i;
   el.innerHTML='<canvas></canvas><canvas class="ik"></canvas><div class="lk"></div><div class="bx"></div>';
-  const p={n:i+1,el,cv:el.children[0],ik:el.children[1],lk:el.children[2],bx:el.children[3],ratio:S.r0,lines:[],tok:0,on:false};
+  const p={n:i+1,el,cv:el.children[0],ik:el.children[1],lk:el.children[2],bx:el.children[3],ratio:S.r0,lines:[],lz:0,tok:0,on:false};
   el.onclick=e=>tap(p,e);inkEvents(p);desk.appendChild(el);S.pages.push(p)}
  S.boxes=S.boxes.filter(b=>S.pages[b.p-1]);S.boxes.forEach(mk);
  $('#pc').textContent='of '+S.doc.numPages;$('#pg').max=S.doc.numPages;layout(true);updPage(1);if(mq.matches)setPanel(false)}
+const eff=()=>innerWidth>=1000&&S.cols===2?2:1;
+function baseW(){
+ const cs=getComputedStyle(desk),n=eff(),gap=parseFloat(cs.columnGap)||12;
+ const aw=(desk.clientWidth-2*parseFloat(cs.paddingLeft)-gap*(n-1))/n,ah=desk.clientHeight-2*parseFloat(cs.paddingTop);
+ return S.fit==='page'?Math.min(aw,ah/S.r0):Math.min(aw,1000)}
+function sizeAll(){const w=S.W;S.pages.forEach(p=>{const H=Math.round(w*p.ratio);p.el.style.width=w+'px';p.el.style.height=H+'px';for(const c of [p.cv,p.ik]){c.style.width=w+'px';c.style.height=H+'px'}p.lk.innerHTML=''});S.boxes.forEach(place)}
+function redo(){S.pages.forEach(p=>{p.tok++;p.on=false;obs.unobserve(p.el);obs.observe(p.el)})}
+const settle=(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(redo,170)}})();
 function layout(force){
  if(!S.doc)return;
- const cs=getComputedStyle(desk),aw=desk.clientWidth-2*parseFloat(cs.paddingLeft),ah=desk.clientHeight-2*parseFloat(cs.paddingTop);
- const w=Math.max(240,Math.round((S.fit==='page'?Math.min(aw,ah/S.r0):aw)*S.zoom));
+ desk.classList.toggle('two',eff()===2);
+ const w=Math.max(240,Math.round(baseW()*S.zoom));
  $('#zl').textContent=Math.round(S.zoom*100)+'%';
  if(w===S.W&&!force)return;
- const keep=desk.scrollTop/(desk.scrollHeight||1);S.W=w;
- S.pages.forEach(p=>{p.el.style.width=w+'px';p.el.style.height=Math.round(w*p.ratio)+'px';p.tok++;p.on=false;p.cv.width=0;p.ik.width=0;p.lk.innerHTML='';obs.unobserve(p.el);obs.observe(p.el)});
- S.boxes.forEach(place);desk.scrollTop=keep*desk.scrollHeight}
+ const keep=desk.scrollTop/(desk.scrollHeight||1);S.W=w;sizeAll();desk.scrollTop=keep*desk.scrollHeight;redo()}
+function zoomTo(z,cx,cy){
+ z=Math.min(4,Math.max(.5,z));if(!S.doc||z===S.zoom)return;
+ const r=desk.getBoundingClientRect();cx=cx==null?r.width/2:cx-r.left;cy=cy==null?r.height/2:cy-r.top;
+ const fx=(desk.scrollLeft+cx)/desk.scrollWidth,fy=(desk.scrollTop+cy)/desk.scrollHeight;
+ S.zoom=z;S.W=Math.max(240,Math.round(baseW()*z));$('#zl').textContent=Math.round(z*100)+'%';sizeAll();
+ desk.scrollLeft=fx*desk.scrollWidth-cx;desk.scrollTop=fy*desk.scrollHeight-cy;settle()}
 async function render(p){
  if(p.on)return;p.on=true;const t=++p.tok,W=S.W;
  try{
   const pg=await S.doc.getPage(p.n);if(t!==p.tok)return;
-  const v1=pg.getViewport({scale:1}),sc=W/v1.width,dpr=Math.min(window.devicePixelRatio||1,2),v=pg.getViewport({scale:sc*dpr});
-  p.ratio=v1.height/v1.width;const H=Math.round(W*p.ratio);p.el.style.height=H+'px';
-  const cv=p.cv;cv.width=v.width;cv.height=v.height;cv.style.width=W+'px';cv.style.height=H+'px';const ik=p.ik;ik.width=v.width;ik.height=v.height;ik.style.width=W+'px';ik.style.height=H+'px';
-  const ctx=cv.getContext('2d',{willReadFrequently:true});
-  await pg.render({canvasContext:ctx,viewport:v}).promise;if(t!==p.tok)return;
-  drawInk(p);p.lines=detect(ctx,cv.width,cv.height,dpr);S.boxes.filter(b=>b.p===p.n).forEach(place);
-  links(p,pg,sc,t)}catch(e){if(t===p.tok)p.on=false}}
+  const v1=pg.getViewport({scale:1}),sc=W/v1.width,H0=W*v1.height/v1.width;let d=Math.min(window.devicePixelRatio||1,2);
+  if(W*d*H0*d>14e6)d*=Math.sqrt(14e6/(W*d*H0*d));
+  const v=pg.getViewport({scale:sc*d}),off=document.createElement('canvas');off.width=Math.round(v.width);off.height=Math.round(v.height);
+  await pg.render({canvasContext:off.getContext('2d'),viewport:v}).promise;if(t!==p.tok)return;
+  p.ratio=v1.height/v1.width;const H=Math.round(W*p.ratio),cv=p.cv,ik=p.ik,fresh=!cv.width;
+  p.el.style.height=H+'px';
+  cv.width=off.width;cv.height=off.height;cv.getContext('2d',{willReadFrequently:true}).drawImage(off,0,0);
+  ik.width=off.width;ik.height=off.height;for(const c of [cv,ik]){c.style.width=W+'px';c.style.height=H+'px'}
+  drawInk(p);p.lines=[];p.lz=0;p.el.classList.add('ready');
+  if(fresh&&!matchMedia('(prefers-reduced-motion:reduce)').matches)cv.animate([{opacity:.3},{opacity:1}],{duration:180});
+  S.boxes.filter(b=>b.p===p.n).forEach(place);links(p,pg,sc,t)}catch(e){if(t===p.tok)p.on=false}}
 function detect(ctx,w,h,dpr){
  const d=ctx.getImageData(0,0,w,h).data,tol=Math.round(3.5*dpr),dd=Math.max(3,Math.round(4*dpr)),st=w*4,out=[];let cur=null;
  for(let y=dd;y<h-dd;y++){
@@ -168,7 +192,7 @@ async function links(p,pg,sc,t){
   e.onclick=async ev=>{ev.preventDefault();if(a.url){window.open(a.url,'_blank','noopener');return}
    try{const d=typeof a.dest==='string'?await S.doc.getDestination(a.dest):a.dest;go(await S.doc.getPageIndex(d[0]))}catch(_){}};
   p.lk.appendChild(e)}}
-function go(i){const el=S.pages[i].el;desk.scrollTo({top:el.getBoundingClientRect().top-desk.getBoundingClientRect().top+desk.scrollTop-12})}
+function go(i){const el=S.pages[i].el;desk.scrollTo({top:el.getBoundingClientRect().top-desk.getBoundingClientRect().top+desk.scrollTop-12,behavior:'smooth'})}
 function snapTo(p,fx,fy){
  const ls=p.lines.filter(l=>fx>=l.x0-.03&&fx<=l.x1+.03);if(!ls.length)return null;
  const ds=[];for(let i=1;i<ls.length;i++){const d=ls[i].y-ls[i-1].y;if(d>.012&&d<.12)ds.push(d)}
@@ -202,6 +226,7 @@ function tap(p,e){if(S.mode!=='type')return;
  if(e.target.tagName==='TEXTAREA'||e.target.closest('.lnk'))return;
  const r=p.el.getBoundingClientRect(),fx=(e.clientX-r.left)/S.W,fy=(e.clientY-r.top)/S.W;
  S.boxes=S.boxes.filter(b=>{if(b.t)return true;b.el&&b.el.remove();return false});
+ if(S.snap&&!p.lz&&p.cv.width){try{p.lines=detect(p.cv.getContext('2d'),p.cv.width,p.cv.height,p.cv.width/S.W)}catch(_){p.lines=[]}p.lz=1}
  const b={p:p.n,x:fx,w:.3,by:0,base:.035,mult:S.mult,sr:S.sr,t:''},L=S.snap?snapTo(p,fx,fy):null;
  if(L){let s={x0:0,x1:1};try{s=span(p,L.l,L.sp,fx)}catch(_){}
   b.base=L.sp;const lf=Math.max(L.l.x0,s.x0),rt=Math.min(L.l.x1,s.x1);
@@ -229,8 +254,8 @@ $('#del').onclick=()=>{const b=S.sel;if(!b)return;b.el.remove();S.boxes=S.boxes.
 $('#snap').onclick=e=>{S.snap=!S.snap;e.target.setAttribute('aria-pressed',S.snap)};
 function setFit(m){S.fit=m;S.zoom=1;$('#fw').setAttribute('aria-pressed',m==='width');$('#fp').setAttribute('aria-pressed',m==='page');layout(true)}
 $('#fw').onclick=()=>setFit('width');$('#fp').onclick=()=>setFit('page');
-$('#zi').onclick=()=>{S.zoom=Math.min(3,S.zoom*1.2);layout()};
-$('#zo').onclick=()=>{S.zoom=Math.max(.5,S.zoom/1.2);layout()};
+$('#zi').onclick=()=>zoomTo(S.zoom*1.2);
+$('#zo').onclick=()=>zoomTo(S.zoom/1.2);
 $('#pg').onchange=e=>{if(S.doc)go(Math.min(S.pages.length,Math.max(1,+e.target.value||1))-1)};
 $('#file').onchange=e=>openFile(e.target.files[0]);$('#file2').onchange=e=>openFile(e.target.files[0]);
 desk.ondragover=e=>e.preventDefault();desk.ondrop=e=>{e.preventDefault();openFile(e.dataTransfer.files[0])};
@@ -281,7 +306,7 @@ $('#dl').onclick=async()=>{
  catch(e){toast('The PDF couldn’t be created. Try again.')}
  bt.disabled=false;bt.textContent='Download PDF'};
 
-Object.assign(S,{mode:'type',col:'#14267a',pw:4,ink:{},undo:[]});
+Object.assign(S,{cols:1,mode:'type',col:'#14267a',pw:4,ink:{},undo:[]});
 const touches=new Map();
 function seg(x,s,k,from){x.strokeStyle=x.fillStyle=s.c;x.lineWidth=s.w*k;x.lineCap=x.lineJoin='round';const q=s.pts;
  if(q.length===1){x.beginPath();x.arc(q[0][0]*k,q[0][1]*k,s.w*k/2,0,7);x.fill();return}
@@ -289,7 +314,7 @@ function seg(x,s,k,from){x.strokeStyle=x.fillStyle=s.c;x.lineWidth=s.w*k;x.lineC
 function drawInk(p){const c=p.ik;if(!c.width)return;const x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);for(const s of S.ink[p.n]||[])seg(x,s,c.width,0)}
 function wipe(p,t){const r=Math.max(.012,S.pw/1000*3),a=S.ink[p.n]||[],n=a.filter(s=>!s.pts.some(q=>Math.hypot(q[0]-t[0],q[1]-t[1])<r));if(n.length!==a.length){S.ink[p.n]=n;drawInk(p)}}
 function inkEvents(p){
- const c=p.ik;let cur=null;
+ const c=p.ik;c.getContext('2d',{desynchronized:true});let cur=null;
  const pt=e=>{const r=p.el.getBoundingClientRect();return[+((e.clientX-r.left)/S.W).toFixed(4),+((e.clientY-r.top)/S.W).toFixed(4)]};
  c.onpointerdown=e=>{
   c.setPointerCapture(e.pointerId);
@@ -335,6 +360,14 @@ if('serviceWorker' in navigator&&location.protocol!=='file:'){
 }
 addEventListener('offline',()=>toast('You’re offline. Everything still works.'));
 addEventListener('online',()=>toast('Back online.'));
+
+$('#cols').onclick=e=>{S.cols=S.cols===1?2:1;e.currentTarget.setAttribute('aria-pressed',S.cols===2);S.zoom=1;layout(true)};
+desk.addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();zoomTo(S.zoom*Math.exp(-Math.max(-50,Math.min(50,e.deltaY))*.006),e.clientX,e.clientY)},{passive:false});
+let pd=0;const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+desk.addEventListener('touchstart',e=>{pd=e.touches.length===2?dist(e.touches):0},{passive:true});
+desk.addEventListener('touchmove',e=>{if(e.touches.length!==2||!pd)return;e.preventDefault();const d=dist(e.touches),t=e.touches;zoomTo(S.zoom*d/pd,(t[0].clientX+t[1].clientX)/2,(t[0].clientY+t[1].clientY)/2);pd=d},{passive:false});
+desk.addEventListener('touchend',e=>{if(e.touches.length<2)pd=0});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&S.mode!=='type'){e.preventDefault();$('#ud').click()}});
 lab();
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('jt',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 async function idbPut(k,v){const d=await idb();return new Promise((res,rej)=>{const t=d.transaction('f','readwrite');t.objectStore('f').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
