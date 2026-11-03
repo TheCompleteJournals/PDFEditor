@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>Journal Editor</title>
+<title>Journal typer</title>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#2447d6">
+<link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Journal typer">
 <style>
 :root{--bg:#e9ecf2;--bar:#fff;--ink:#1a2233;--mut:#5b6578;--line:#d3d8e2;--acc:#2447d6;--onacc:#fff;--accbg:rgba(36,71,214,.1);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151c;--bar:#1b1f29;--ink:#e8ebf2;--mut:#9aa3b5;--line:#2d3342;--acc:#8ea2ff;--onacc:#101636;--accbg:rgba(142,162,255,.16)}}
@@ -53,6 +56,7 @@ textarea.sel{background:rgba(36,71,214,.07);box-shadow:0 0 0 1px rgba(36,71,214,
 #msg{color:#c0392b;margin-top:10px}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;max-width:80vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50}
 #toast.on{opacity:1}
+#upd{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom,0px));background:var(--bar);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;display:flex;gap:10px;align-items:center;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:92vw}
 #fab,#pgb{display:none;position:fixed;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:20}
 #fab{right:14px;width:52px;height:52px;border-radius:50%;padding:0;background:var(--acc);color:var(--onacc);border-color:var(--acc);box-shadow:0 4px 14px rgba(0,0,0,.35)}
 #pgb{left:14px;background:var(--bar);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 12px;pointer-events:none;font-variant-numeric:tabular-nums;box-shadow:0 2px 8px rgba(0,0,0,.25)}
@@ -68,7 +72,7 @@ textarea.sel{background:rgba(36,71,214,.07);box-shadow:0 0 0 1px rgba(36,71,214,
 }
 @media (prefers-reduced-motion:reduce){#panel,details.sec>summary::after{transition:none}}
 </style></head><body>
-<header id="top"><span class="brand">📓 Journal Editor</span><span class="sp"></span><span class="v" id="pgt"></span><button id="tg" aria-expanded="true" aria-controls="panel">Hide tools ▴</button></header>
+<header id="top"><span class="brand">📓 Journal typer</span><span class="sp"></span><span class="v" id="pgt"></span><button id="tg" aria-expanded="true" aria-controls="panel">Hide tools ▴</button></header>
 <div id="panel">
 <div class="pheader"><strong>Tools</strong><button id="pcl">Close ✕</button></div>
 <div class="sections">
@@ -98,12 +102,13 @@ textarea.sel{background:rgba(36,71,214,.07);box-shadow:0 0 0 1px rgba(36,71,214,
 <div id="empty"><h1>Type straight into your journal</h1><p>Open your journal PDF, then tap anywhere on a page to start typing. Text snaps to the ruled lines on its own. Your file stays on this device.</p><label class="btn pri">Choose PDF<input id="file2" type="file" accept="application/pdf"></label><div id="msg" role="alert"></div></div>
 </main>
 <button id="fab" aria-label="Open tools" aria-expanded="false" aria-controls="panel"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button><div id="pgb" aria-hidden="true"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<div id="upd" role="status" hidden>A new version is ready. <button id="updb" class="pri">Refresh</button></div>
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
 <script>
 const $=s=>document.querySelector(s),desk=$('#desk');
 const S={doc:null,pages:[],boxes:[],sel:null,fit:'width',zoom:1,snap:true,mult:1,sr:.6,W:0,r0:1.41,key:''};
-if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='lib/pdf.worker.min.js';
 const obs=new IntersectionObserver(es=>es.forEach(e=>{const p=S.pages[+e.target.dataset.i];if(e.isIntersecting)render(p);else if(p.on){p.tok++;p.on=false;p.cv.width=0;p.ik.width=0}}),{root:desk,rootMargin:'900px 0px'});
 function msg(t){const m=$('#msg');if(m)m.textContent=t}
 async function openFile(f){
@@ -316,6 +321,20 @@ $('#tg').onclick=()=>setPanel(!isOpen());$('#fab').onclick=()=>setPanel(!isOpen(
 mq.onchange=()=>{initSections();setPanel(!mq.matches)};
 desk.addEventListener('pointerdown',()=>{if(mq.matches&&isOpen())setPanel(false)},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&mq.matches&&isOpen())setPanel(false)});
+
+if('serviceWorker' in navigator&&location.protocol!=='file:'){
+ const had=!!navigator.serviceWorker.controller;let rl=false;
+ navigator.serviceWorker.register('sw.js').then(reg=>{
+  const ready=()=>{if(navigator.serviceWorker.controller)$('#upd').hidden=false};
+  if(reg.waiting)ready();
+  reg.addEventListener('updatefound',()=>{const w=reg.installing;if(w)w.addEventListener('statechange',()=>{if(w.state==='installed')ready()})});
+  const chk=()=>{if(navigator.onLine)reg.update().catch(()=>{})};
+  addEventListener('online',chk);document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});
+  $('#updb').onclick=()=>{if(reg.waiting)reg.waiting.postMessage('skip');else location.reload()}}).catch(()=>{});
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!had||rl)return;rl=true;location.reload()});
+}
+addEventListener('offline',()=>toast('You’re offline. Everything still works.'));
+addEventListener('online',()=>toast('Back online.'));
 lab();
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('jt',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 async function idbPut(k,v){const d=await idb();return new Promise((res,rej)=>{const t=d.transaction('f','readwrite');t.objectStore('f').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
